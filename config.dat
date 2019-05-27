@@ -1,6 +1,0 @@
-in_file         data.zip
-to_alph_file    to_1.txt
-to_numb_file    to_2.txt
-indexing_threads 2
-merging_threads 3
-num_of_threads  4

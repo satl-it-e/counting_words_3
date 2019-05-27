@@ -1,32 +1,22 @@
 cmake_minimum_required(VERSION 3.5)
-project(counting_words_2)
+project(counting_words_3)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_FLAGS -pthread)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 
 find_package(Threads REQUIRED)
+find_package(Qt5Concurrent REQUIRED)
+find_package(Qt5 REQUIRED COMPONENTS Concurrent)
 
-set(Boost_USE_MULTITHREADED ON)
-set(Boost_USE_STATIC_RUNTIME OFF)
+add_executable(counting_words_3 main.cpp additional.cpp config.cpp)
 
-set(ICU_MAJOR_VER "57")
-set(ICU_FULL_VERSION "${ICU_MAJOR_VER}.1")
-
-
-find_package(Boost REQUIRED system)
-find_package(Boost COMPONENTS system filesystem locale REQUIRED)
-find_package(LibArchive REQUIRED)
+target_link_libraries(counting_words_3 Qt5::Concurrent)
+target_link_libraries(counting_words_3  Threads::Threads)
 
 
-add_executable(counting_words_2 test_main.cpp additional.cpp time_measure.h config.cpp my_archive.cpp)
 
-
-target_link_libraries(counting_words_2  Threads::Threads)
-target_link_libraries(counting_words_2 ${LibArchive_LIBRARIES})
-target_link_libraries( counting_words_2
-        ${Boost_FILESYSTEM_LIBRARY}
-        ${Boost_SYSTEM_LIBRARY}
-        ${Boost_LOCALE_LIBRARY}
-        ${ICU_LIBRARIES})
+#find_package(LibArchive REQUIRED)
+#target_link_libraries(counting_words_3 ${LibArchive_LIBRARIES})
 
 
