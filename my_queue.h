@@ -44,24 +44,25 @@ public:
         return (producers_num > 0) || (q->size() >= n);
     }
 
-    std::vector<T> pop(int n){
-        std::vector<T> some;
-        std::unique_lock<std::mutex> lock(mtx);
+    QVector<T> pop(int n){
+        QVector<T> some;
+        mtx.lock();
         while ((producers_num > 0) || (q->size() >= n)) {
             while(!notified && (q->size() < n)){
-                cv.wait(lock);
+                qcv.wait(&mtx);
             }
             while(q->size() >= n) {
                 while (n > 0) {
-                    some.emplace_back(q->front());
+                    some.push_back(q->front());
                     q->pop();
                     n--;
                 }
-                return some;
             }
             notified = false;
         }
+        mtx.unlock();
         return some;
+
     }
 };
 
