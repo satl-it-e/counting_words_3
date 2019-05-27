@@ -16,28 +16,24 @@ private:
     QMutex mtx;
     QWaitCondition qcv;
 
-    QQueue<T> *q = new QQueue<T>;
-    int producers_num = 0;
-    bool notified = false;
+    QAtomicPointer<QQueue<T>> q = new QQueue<T>;
+    QAtomicInt producers_num = 0;
+    QAtomicInt is_notified = 0;
 
 public:
     void set_producers_number(int num){
         producers_num = num;
     }
     void finish(){
-        mtx.lock();
         producers_num--;
-        notified = true;
+        is_notified = 1;
         qcv.wakeAll();
-        mtx.unlock();
     }
 
     void push(T element){
-        mtx.lock();
         q->enqueue(element);
-        notified = true;
+        is_notified = 1;
         qcv.wakeOne();
-        mtx.unlock();
     }
 
     bool can_try_pop(int n){
@@ -46,9 +42,8 @@ public:
 
     QVector<T> pop(int n){
         QVector<T> some;
-        mtx.lock();
         while ((producers_num > 0) || (q->size() >= n)) {
-            while(!notified && (q->size() < n)){
+            while(!is_notified && (q->size() < n)){
                 qcv.wait(&mtx);
             }
             while(q->size() >= n) {
@@ -58,11 +53,9 @@ public:
                     n--;
                 }
             }
-            notified = false;
+            is_notified = false;
         }
-        mtx.unlock();
         return some;
-
     }
 };
 
