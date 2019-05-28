@@ -1,6 +1,5 @@
 in_file          bigger_example.zip
 to_alph_file     to_alph.txt
 to_numb_file     to_numb.txt
-indexing_threads 2
-merging_threads  2
-num_of_threads   2
+indexing_threads 1
+merging_threads  1

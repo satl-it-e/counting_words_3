@@ -61,11 +61,12 @@ void index_thread(tbb::concurrent_queue<std::string*> &mq_str, tbb::concurrent_q
             mq_map.push(&processed_map);
         }
     }
+    std::cout << "INDEX🐠 FINISHED🎉" << std::endl;
     mq_map.push(nullptr);
 }
 
 
-std::map<std::string, int> merge_maps(std::vector< std::map<std::string, int> > maps){
+std::map<std::string, int> merge_maps(std::vector< std::map<std::string, int>> maps){
     std::map<std::string, int> new_map;
     for (auto &map: maps){
         for (auto &el: map){
@@ -83,7 +84,7 @@ std::map<std::string, int> merge_maps(std::vector< std::map<std::string, int> > 
 
 void merge_thread(tbb::concurrent_queue<std::map<std::string, int>*> &mq_maps){
     std::map<std::string, int>* process_map;
-    std::vector<std::map<std::string, int>> maps_in_hand;
+    std::vector<std::map<std::string, int> > maps_in_hand;
 
     while(true){
         if(mq_maps.try_pop(process_map)){
@@ -96,9 +97,8 @@ void merge_thread(tbb::concurrent_queue<std::map<std::string, int>*> &mq_maps){
                 std::cout << "MERGE🦄 got nullptr ❌" << std::endl;
                 break;
             } else {
-                std::map<std::string, int> pop_map = *process_map;
-                maps_in_hand.emplace_back(pop_map);
-
+                maps_in_hand.push_back(*process_map);
+                std::cout <<"tipa good pop" << std::endl;
                 if (maps_in_hand.size() >= 2) {
                     std::map<std::string, int> processed_map = merge_maps(maps_in_hand);
                     std::cout << "MERGE🦄 push 💜" << std::endl;
@@ -110,6 +110,7 @@ void merge_thread(tbb::concurrent_queue<std::map<std::string, int>*> &mq_maps){
 
 //    std::map<std::string, int>* empty_map = nullptr;
     mq_maps.push(nullptr);
+    std::cout << "MERGE🦄 FINISHED🎉" << std::endl;
 }
 
 int main()
@@ -126,7 +127,7 @@ int main()
     std::string content;
 
     tbb::concurrent_queue<std::string*> mq_str;
-    tbb::concurrent_queue<std::map<std::string, int>*> mq_map;
+    tbb::concurrent_queue<std::unique_ptr<std::map<std::string, int> > > mq_map;
 
 
     auto gen_st_time = get_current_time_fenced();
@@ -175,43 +176,43 @@ int main()
 
 
     auto index_fn_time = get_current_time_fenced();
-
-    std::map<std::string, int>* res;
-
-
-    if (!mq_map.try_pop(res)) {
-        std::cerr << "Error in MAP QUEUE" << std::endl;
-        return -6;
-    }
-
-    std::vector<std::pair<std::string, int> > vector_words;
-    for (auto word: *res){
-        vector_words.emplace_back(word);
-    }
-
-    std::sort(vector_words.begin(), vector_words.end(), [](const auto t1, const auto t2){ return t1.second < t2.second;});
-    std::ofstream num_out_f(mc.to_numb_file);
-    for (auto &v : vector_words) {
-        num_out_f << std::left << std::setw(20) << v.first << ": ";
-        num_out_f << std::right << std::setw(10) << std::to_string(v.second) << std::endl;
-    }
-
-    std::sort(vector_words.begin(), vector_words.end(), [](const auto t1, const auto t2){ return t1.first.compare(t2.first)<0;});
-    std::ofstream alp_out_f(mc.to_alph_file);
-    for (auto &v : vector_words) {
-        alp_out_f << std::left << std::setw(20) << v.first <<  ": ";
-        alp_out_f << std::right << std::setw(10) << std::to_string(v.second) << std::endl;
-    }
-
-    auto gen_fn_time = get_current_time_fenced();         //~~~~~~~~~ general finish
-
-
-    std::cout << std::left  << std::setw(35) <<  "General time (read-index-write): ";
-    std::cout << std::right  << std::setw(10) << to_us(gen_fn_time - gen_st_time) << std::endl;
-    std::cout << std::left  << std::setw(35) << "Reading time: ";
-    std::cout << std::right << std::setw(10) << to_us(read_fn_time - gen_st_time)  << std::endl;
-    std::cout << std::left << std::setw(35) << "Indexing time (boost included): " ;
-    std::cout << std::right  << std::setw(10) << to_us(index_fn_time - read_fn_time)  << std::endl;
+//
+//    std::map<std::string, int>* res;
+//
+//
+//    if (!mq_map.try_pop(res)) {
+//        std::cerr << "Error in MAP QUEUE" << std::endl;
+//        return -6;
+//    }
+//
+//    std::vector<std::pair<std::string, int> > vector_words;
+//    for (auto word: *res){
+//        vector_words.emplace_back(word);
+//    }
+//
+//    std::sort(vector_words.begin(), vector_words.end(), [](const auto t1, const auto t2){ return t1.second < t2.second;});
+//    std::ofstream num_out_f(mc.to_numb_file);
+//    for (auto &v : vector_words) {
+//        num_out_f << std::left << std::setw(20) << v.first << ": ";
+//        num_out_f << std::right << std::setw(10) << std::to_string(v.second) << std::endl;
+//    }
+//
+//    std::sort(vector_words.begin(), vector_words.end(), [](const auto t1, const auto t2){ return t1.first.compare(t2.first)<0;});
+//    std::ofstream alp_out_f(mc.to_alph_file);
+//    for (auto &v : vector_words) {
+//        alp_out_f << std::left << std::setw(20) << v.first <<  ": ";
+//        alp_out_f << std::right << std::setw(10) << std::to_string(v.second) << std::endl;
+//    }
+//
+//    auto gen_fn_time = get_current_time_fenced();         //~~~~~~~~~ general finish
+//
+//
+//    std::cout << std::left  << std::setw(35) <<  "General time (read-index-write): ";
+//    std::cout << std::right  << std::setw(10) << to_us(gen_fn_time - gen_st_time) << std::endl;
+//    std::cout << std::left  << std::setw(35) << "Reading time: ";
+//    std::cout << std::right << std::setw(10) << to_us(read_fn_time - gen_st_time)  << std::endl;
+//    std::cout << std::left << std::setw(35) << "Indexing time (boost included): " ;
+//    std::cout << std::right  << std::setw(10) << to_us(index_fn_time - read_fn_time)  << std::endl;
 
     std::cout << "\nFinished.\n" << std::endl;
 
