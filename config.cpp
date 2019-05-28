@@ -50,11 +50,6 @@ bool MyConfig::set_num_of_mrg_threads(const std::list<std::string> &s_values) {
     return false;
 }
 
-bool MyConfig::set_num_of_threads(const std::list<std::string> &s_values){
-    num_of_threads = indexing_threads + merging_threads;
-    return true;
-}
-
 
 
 bool MyConfig::is_configured(){
@@ -70,7 +65,6 @@ int MyConfig::load_configs_from_file(const std::string &f_name){
     cnf.emplace(std::make_pair("to_numb_file", [this](const std::list<std::string> &s_values)-> bool {return set_to_numb_file(s_values);}));
     cnf.emplace(std::make_pair("indexing_threads", [this](const std::list<std::string> s_values)-> bool { return set_num_of_ind_threads(s_values);}));
     cnf.emplace(std::make_pair("merging_threads", [this](const std::list<std::string> s_values)-> bool { return set_num_of_mrg_threads(s_values);}));
-    cnf.emplace(std::make_pair("num_of_threads", [this](const std::list<std::string> &s_values)-> bool {return set_num_of_threads(s_values);}));
 
     try{
 
