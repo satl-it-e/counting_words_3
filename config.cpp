@@ -9,7 +9,7 @@ bool MyConfig::set_in_file(const std::list<std::string> &s_values) {
         in_file = s_values.front();
         return true;
     }
-    return false;
+    return fs::is_directory(in_file);
 }
 
 
