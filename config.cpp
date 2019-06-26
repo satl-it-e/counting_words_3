@@ -1,20 +1,27 @@
 #include "config.h"
 
 
+namespace fs = boost::filesystem;
+
+
 bool MyConfig::set_in_file(const std::list<std::string> &s_values) {
     std::set<std::string> arch_ext = {".zip", ".targz", ".tar.gz", ".7z"};
-    std::string ext = get_file_ext(s_values.front());
+    in_file = s_values.front();
 
-    if (ext == ".txt" || arch_ext.find(ext) != arch_ext.end()){
-        in_file = s_values.front();
-        return true;
+    std::transform(in_file.begin(), in_file.end(), in_file.begin(), ::tolower);
+    if (fs::is_regular_file(in_file)){
+        std::string ext = boost::filesystem::extension(in_file);
+        return (ext == ".txt" || arch_ext.find(ext) != arch_ext.end());
     }
-    return false;
+
+    return fs::is_directory(in_file);
 }
 
 
 bool MyConfig::set_to_alph_file(const std::list<std::string> &s_values) {
-    if ( is_file_ext(s_values.front(), ".txt") ){
+    std::string current = s_values.front();
+    std::transform(current.begin(), current.end(), current.begin(), ::tolower);
+    if (boost::filesystem::extension(current) == ".txt"){
         to_alph_file = s_values.front();
         return true;
     }
@@ -23,7 +30,9 @@ bool MyConfig::set_to_alph_file(const std::list<std::string> &s_values) {
 
 
 bool MyConfig::set_to_numb_file(const std::list<std::string> &s_values) {
-    if ( is_file_ext(s_values.front(), ".txt") ){
+    std::string current = s_values.front();
+    std::transform(current.begin(), current.end(), current.begin(), ::tolower);
+    if (boost::filesystem::extension(current) == ".txt"){
         to_numb_file = s_values.front();
         return true;
     }
@@ -49,7 +58,6 @@ bool MyConfig::set_num_of_mrg_threads(const std::list<std::string> &s_values) {
     }
     return false;
 }
-
 
 
 bool MyConfig::is_configured(){
@@ -92,12 +100,12 @@ int MyConfig::load_configs_from_file(const std::string &f_name){
                 if ( cnf.find(cnf_name) != cnf.end()){
                     if ( cnf[cnf_name](content) ){
                         check_set.erase (cnf_name);
-                    } else { std::cerr << "Error. Couldn't load" + cnf_name + "\n" << std::endl; return -3; }
+                    } else { std::cerr << "Error. Couldn't load " + cnf_name + "\n" << std::endl; return -3; }
                 }
             }
             f.close();
             return 0;
 
-        } else { std::cerr << "File coulnd't be opened."; return -1; }
+        } else { std::cerr << "File couldn't be opened."; return -1; }
     } catch(std::string &err){ std::cout << err << std::endl; return -2; }
 }

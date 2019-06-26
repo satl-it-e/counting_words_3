@@ -15,25 +15,24 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "additional.h"
-
+#include "boost/filesystem.hpp"
 
 
 class MyArchive{
 
-    private:
-        struct archive *a;
-        struct archive_entry *entry;
-        bool is_arch = false;
-    
-        std::string read_content();
-    
-    public:
-        int init(std::string& filename);
-    
-        bool next_content_available();
-    
-        std::string get_next_content();
+private:
+    struct archive *a;
+    struct archive_entry *entry;
+    bool is_arch = false;
+
+    std::string read_content();
+
+public:
+    int init(std::string& filename);
+
+    bool next_content_available();
+
+    std::string get_next_content();
 
 };
 

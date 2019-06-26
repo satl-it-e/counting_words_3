@@ -11,33 +11,32 @@
 #include <vector>
 #include <list>
 #include <set>
+#include "boost/filesystem.hpp"
 
 
-#include "additional.h"
+class MyConfig{
 
-    class MyConfig{
+public:
+    std::string in_file;
+    std::string to_alph_file;
+    std::string to_numb_file;
+    unsigned int indexing_threads=0;
+    unsigned int merging_threads=0;
 
-        public:
-            std::string in_file;
-            std::string to_alph_file;
-            std::string to_numb_file;
-            unsigned long indexing_threads;
-            unsigned long merging_threads;
+private:
+    std::unordered_set<std::string> check_set = {"in_file", "to_alph_file", "to_numb_file",
+                                                 "indexing_threads", "merging_threads"};
 
-        private:
-            std::unordered_set<std::string> check_set = {"in_file", "to_alph_file", "to_numb_file",
-                                                         "indexing_threads", "merging_threads"};
+public:
+    bool set_in_file(const std::list<std::string> &s_values);
+    bool set_to_alph_file(const std::list<std::string> &s_values);
+    bool set_to_numb_file(const std::list<std::string> &s_values);
+    bool set_num_of_ind_threads(const std::list<std::string> &s_values);
+    bool set_num_of_mrg_threads(const std::list<std::string> &s_values);
 
-        public:
-            bool set_in_file(const std::list<std::string> &s_values);
-            bool set_to_alph_file(const std::list<std::string> &s_values);
-            bool set_to_numb_file(const std::list<std::string> &s_values);
-            bool set_num_of_ind_threads(const std::list<std::string> &s_values);
-            bool set_num_of_mrg_threads(const std::list<std::string> &s_values);
-
-            bool is_configured();
-            int load_configs_from_file(const std::string &f_name);
-    };
+    bool is_configured();
+    int load_configs_from_file(const std::string &f_name);
+};
 
 
 #endif //COUNTING_WORDS_CONFIG_H

@@ -17,24 +17,23 @@
 #include <boost/locale.hpp>
 #include <boost/locale/boundary/segment.hpp>
 #include <boost/locale/boundary/index.hpp>
+#include <boost/filesystem.hpp>
 
 #include <tbb/concurrent_queue.h>
 #include <ctpl.h>
 
 #include "time_measure.h"
 #include "config.h"
-#include "additional.h"
 #include "my_archive.h"
 
 
 std::mutex mutex_map;
 
 using namespace boost::locale::boundary;
+using namespace boost::filesystem;
 
 
-std::map<std::string, int> index_string(std::string &content){
-    std::locale loc = boost::locale::generator().generate("en_US.UTF-8");
-
+std::map<std::string, int> index_string(std::string &content, std::locale &loc){
     // fold case
     content = boost::locale::to_lower(content, loc);
 
@@ -51,7 +50,7 @@ std::map<std::string, int> index_string(std::string &content){
 }
 
 void index_thread(int id, tbb::concurrent_queue<std::string> &mq_str, tbb::concurrent_queue<std::map<std::string, int>> &mq_map,
-        std::string &poisson_str, std::map<std::string, int> &poisson_map){
+        std::string &poisson_str, std::map<std::string, int> &poisson_map, std::locale &loc){
 
     std::string process_str;
 
@@ -60,7 +59,7 @@ void index_thread(int id, tbb::concurrent_queue<std::string> &mq_str, tbb::concu
             if (process_str == poisson_str){
                 break;
             }
-            std::map<std::string, int> processed_map = index_string(process_str);
+            std::map<std::string, int> processed_map = index_string(process_str, loc);
             mq_map.push(processed_map);
         }
     }
@@ -73,11 +72,7 @@ std::map<std::string, int> merge_maps(std::vector< std::map<std::string, int>> &
     std::map<std::string, int> new_map;
     for (auto &map: maps){
         for (auto &el: map){
-            if (new_map.find(el.first) == new_map.end()){
-                new_map[el.first] = map[el.first];
-            } else{
-                new_map[el.first] += map[el.first];
-            }
+            new_map[el.first] += map[el.first];
         }
     }
     return new_map;
@@ -128,8 +123,57 @@ void merge_thread(int id, tbb::concurrent_queue<std::map<std::string, int>> &mq_
             }
         }
     }
+}
 
-//    std::cout << "MERGE🦄 FINISHED🎉" << std::endl;
+int read_entry(MyArchive &marc, tbb::concurrent_queue<std::string> &mq_str, path &x){
+    // opening archive
+    std::string filename = x.string(), content;
+    std::transform(filename.begin(), filename.end(), filename.begin(), ::tolower);
+    if (boost::filesystem::extension(filename) == ".zip"){
+        if (marc.init(filename) != 0){
+            std::cerr << "Something wrong with file: " << filename << std::endl;
+            return -1;
+        }
+        while (marc.next_content_available()){
+            content = marc.get_next_content();
+            mq_str.push(content);
+        }
+
+    } else if (boost::filesystem::extension(filename) == ".txt"){
+        std::ifstream in_f(filename);
+        if (! in_f.is_open() || in_f.rdstate()){
+            std::cerr << "Couldn't open the file. " << filename << std::endl;
+            return -2;
+        }
+        std::stringstream ss;
+        ss << in_f.rdbuf();
+        content = ss.str();
+        mq_str.push(content);
+    }
+#ifdef print_wrong_file_extensions
+    else {
+        std::cerr << "Wrong file extension for file: " << filename << std::endl;
+    }
+#endif
+    return 0;
+}
+
+
+void process_deep(MyArchive &marc, tbb::concurrent_queue<std::string> &mq_str, path x){
+    if (is_regular_file(x)){
+        read_entry(marc, mq_str, x);
+    }
+
+    else if (is_directory(x))
+    {
+        for (directory_entry& y : directory_iterator(x)){
+            process_deep(marc, mq_str, y.path());
+        }
+    }
+
+    else {
+        std::cerr << x << " exists, but is not a regular file or directory\n";
+    }
 }
 
 int main()
@@ -147,10 +191,10 @@ int main()
 
     tbb::concurrent_queue<std::string> mq_str;
     tbb::concurrent_queue<std::map<std::string, int>> mq_map;
+
     std::string poisson_str = "poisson pillow";
     std::map<std::string, int> poisson_map = {{"poisson pillow", 0}};
 
-    auto gen_st_time = get_current_time_fenced();
 
     int poisson_maps_num = 0;
 
@@ -161,53 +205,51 @@ int main()
     std::vector<std::future<void>> indexing_results(mc.indexing_threads);
     std::vector<std::future<void>> merging_results(mc.merging_threads);
 
+    std::locale loc = boost::locale::generator().generate("en_US.UTF-8");
 
     for (int i=0; i < mc.indexing_threads; i++){
-        indexing_results[i] = index_threads.push(index_thread, std::ref(mq_str), std::ref(mq_map), std::ref(poisson_str), std::ref(poisson_map));
+        indexing_results[i] = index_threads.push(index_thread, std::ref(mq_str), std::ref(mq_map),
+                std::ref(poisson_str), std::ref(poisson_map), std::ref(loc));
     }
 
     for (int i=0; i < mc.merging_threads; i++){
-        merging_results[i] = merge_threads.push(merge_thread, std::ref(mq_map), std::ref(poisson_map), std::ref(mc.indexing_threads), std::ref(poisson_maps_num));
+        merging_results[i] = merge_threads.push(merge_thread, std::ref(mq_map), std::ref(poisson_map),
+                std::ref(mc.indexing_threads), std::ref(poisson_maps_num));
     }
 
+    auto gen_st_time = get_current_time_fenced();
 
-    // opening archive
-    if (is_file_ext(mc.in_file, ".zip")){
-        MyArchive arc;
-        if (arc.init(mc.in_file) != 0){
-            return -4;
-        }
-        while (arc.next_content_available()){
-            content = arc.get_next_content();
-            mq_str.push(content);
-        }
+    MyArchive my_arc;
+    std::thread reader(process_deep, std::ref(my_arc), std::ref(mq_str), mc.in_file);
 
-    } else{
-        std::ifstream in_f(mc.in_file);
-        if (! in_f.is_open() || in_f.rdstate())
-        { std::cerr << "Couldn't open input-file."; return -2; }
-        std::stringstream ss;
-        ss << in_f.rdbuf();
-        content = ss.str();
-        mq_str.push(content);
+    try
+    {
+        if (exists(mc.in_file))
+        {
+            reader.join();
+            mq_str.push(poisson_str);
+        }
+        else {
+            std::cerr << mc.in_file << " does not exist\n";
+            return -3;
+        }
+    } catch (const filesystem_error& ex){
+        std::cerr << ex.what() << '\n';
+        return -2;
     }
-    mq_str.push(poisson_str);
+
+    std::cout << "Everything had been READ from archive." << std::endl;
 
     for (int i = 0; i < mc.indexing_threads; i++){
         indexing_results[i].get();
     }
 
+    auto gen_fn_time = get_current_time_fenced();
+
     for (int i = 0; i < mc.merging_threads; i++){
         merging_results[i].get();
     }
 
-
-    auto read_fn_time = get_current_time_fenced();
-
-    std::cout << "Everything had been READ from archive." << std::endl;
-
-
-    auto index_fn_time = get_current_time_fenced();
 
     std::map<std::string, int> res;
 
@@ -221,7 +263,7 @@ int main()
         vector_words.emplace_back(word);
     }
 
-    std::sort(vector_words.begin(), vector_words.end(), [](const auto t1, const auto t2){ return t1.second < t2.second;});
+    std::sort(vector_words.begin(), vector_words.end(), [](const auto t1, const auto t2){ return t1.second > t2.second;});
     std::ofstream num_out_f(mc.to_numb_file);
     for (auto &v : vector_words) {
         num_out_f << std::left << std::setw(20) << v.first << ": ";
@@ -235,15 +277,8 @@ int main()
         alp_out_f << std::right << std::setw(10) << std::to_string(v.second) << std::endl;
     }
 
-    auto gen_fn_time = get_current_time_fenced();         //~~~~~~~~~ general finish
-
-
-    std::cout << std::left  << std::setw(35) <<  "General time (read-index-write): ";
+    std::cout << std::left  << std::setw(35) <<  "General time (read-index): ";
     std::cout << std::right  << std::setw(10) << to_us(gen_fn_time - gen_st_time) << std::endl;
-    std::cout << std::left  << std::setw(35) << "Reading time: ";
-    std::cout << std::right << std::setw(10) << to_us(read_fn_time - gen_st_time)  << std::endl;
-    std::cout << std::left << std::setw(35) << "Indexing time (boost included): " ;
-    std::cout << std::right  << std::setw(10) << to_us(index_fn_time - read_fn_time)  << std::endl;
 
     std::cout << "\nFinished.\n" << std::endl;
 

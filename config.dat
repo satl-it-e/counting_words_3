@@ -1,4 +1,4 @@
-in_file          bigger_example.zip
+in_file          test/
 to_alph_file     to_alph.txt
 to_numb_file     to_numb.txt
 indexing_threads 5
