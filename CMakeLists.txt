@@ -21,8 +21,9 @@ find_package(TBB REQUIRED)
 
 
 include_directories( ${TBB_INCLUDE_DIR} )
+include_directories(thread_pool)
 
-add_executable(counting_words_3 main.cpp additional.cpp config.cpp my_archive.cpp)
+add_executable(counting_words_3 main.cpp additional.cpp config.cpp my_archive.cpp additional.h config.h my_archive.h thread_pool/ctpl.h)
 
 
 target_link_libraries(counting_words_3  Threads::Threads)
@@ -32,6 +33,7 @@ target_link_libraries( counting_words_3
         ${Boost_SYSTEM_LIBRARY}
         ${Boost_LOCALE_LIBRARY}
         ${ICU_LIBRARIES})
+
 target_link_libraries(counting_words_3 tbb)
 
 

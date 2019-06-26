@@ -18,17 +18,21 @@
 #include <boost/locale/boundary/segment.hpp>
 #include <boost/locale/boundary/index.hpp>
 
+#include <tbb/concurrent_queue.h>
+#include <ctpl.h>
+
 #include "time_measure.h"
 #include "config.h"
 #include "additional.h"
 #include "my_archive.h"
 
-#include <tbb/concurrent_queue.h>
+
+std::mutex mutex_map;
 
 using namespace boost::locale::boundary;
 
 
-std::map<std::string, int> index_string(std::string content){
+std::map<std::string, int> index_string(std::string &content){
     std::locale loc = boost::locale::generator().generate("en_US.UTF-8");
 
     // fold case
@@ -46,27 +50,30 @@ std::map<std::string, int> index_string(std::string content){
     return cut_words;
 }
 
-void index_thread(tbb::concurrent_queue<std::string*> &mq_str, tbb::concurrent_queue<std::map<std::string, int>*> &mq_map){
-    std::string* process_str= nullptr;
+void index_thread(tbb::concurrent_queue<std::string> &mq_str, tbb::concurrent_queue<std::map<std::string, int>> &mq_map,
+        std::string &poisson_str, std::map<std::string, int> &poisson_map){
+
+    std::string process_str;
 
     while(true){
         if (mq_str.try_pop(process_str)){
             std::cout << "INDEX🐠 pop 🍏" << std::endl;
-            if (process_str == nullptr){
+            if (process_str == poisson_str){
                 std::cout << "INDEX🐠 got nullptr ❌" << std::endl;
                 break;
             }
-            std::map<std::string, int> processed_map = index_string(*process_str);
+            std::map<std::string, int> processed_map = index_string(process_str);
             std::cout << "INDEX🐠 push 💜" << std::endl;
-            mq_map.push(&processed_map);
+            mq_map.push(processed_map);
         }
     }
     std::cout << "INDEX🐠 FINISHED🎉" << std::endl;
-    mq_map.push(nullptr);
+    mq_str.push(poisson_str);
+    mq_map.push(poisson_map);
 }
 
 
-std::map<std::string, int> merge_maps(std::vector< std::map<std::string, int>> maps){
+std::map<std::string, int> merge_maps(std::vector< std::map<std::string, int>> &maps){
     std::map<std::string, int> new_map;
     for (auto &map: maps){
         for (auto &el: map){
@@ -82,34 +89,48 @@ std::map<std::string, int> merge_maps(std::vector< std::map<std::string, int>> m
 
 
 
-void merge_thread(tbb::concurrent_queue<std::map<std::string, int>*> &mq_maps){
-    std::map<std::string, int>* process_map;
+void merge_thread(tbb::concurrent_queue<std::map<std::string, int>> &mq_maps, std::map<std::string, int> &poisson_map,
+        const int &producers_num, int &poisson_maps_num){
+    std::map<std::string, int> process_map;
     std::vector<std::map<std::string, int> > maps_in_hand;
 
     while(true){
         if(mq_maps.try_pop(process_map)){
             std::cout << "MERGE🦄 pop 🍏" << std::endl;
-            if (process_map == nullptr){
-                for (auto &m: maps_in_hand){
-                    std::cout << "MERGE🦄 push 💜 before nullptr" << std::endl;
-                    mq_maps.push(&m);
+            if (process_map == poisson_map){
+                // Checking if this is not false poisson pillow
+                mutex_map.lock();
+                poisson_maps_num++;
+                std::cout << "MERGE🦄 get some nullptr🥏" << std::endl;
+
+                if (poisson_maps_num >= producers_num) {
+                    for (auto &m: maps_in_hand) {
+                        std::cout << "MERGE🦄 push 💜 before nullptr" << std::endl;
+                        mq_maps.push(m);
+                    }
+                    for (int i = 0; i < producers_num; i++){
+                        mq_maps.push(poisson_map);
+                    }
+                    std::cout << "MERGE🦄 got nullptr ❌" << std::endl;
+                    poisson_maps_num = 0;
+                    mutex_map.unlock();
+                    break;
                 }
-                std::cout << "MERGE🦄 got nullptr ❌" << std::endl;
-                break;
+                mutex_map.unlock();
+
             } else {
-                maps_in_hand.push_back(*process_map);
+                maps_in_hand.push_back(process_map);
                 std::cout <<"tipa good pop" << std::endl;
                 if (maps_in_hand.size() >= 2) {
                     std::map<std::string, int> processed_map = merge_maps(maps_in_hand);
+                    maps_in_hand.clear();
                     std::cout << "MERGE🦄 push 💜" << std::endl;
-                    mq_maps.push(&processed_map);
+                    mq_maps.push(processed_map);
                 }
             }
         }
     }
 
-//    std::map<std::string, int>* empty_map = nullptr;
-    mq_maps.push(nullptr);
     std::cout << "MERGE🦄 FINISHED🎉" << std::endl;
 }
 
@@ -126,23 +147,33 @@ int main()
 
     std::string content;
 
-    tbb::concurrent_queue<std::string*> mq_str;
-    tbb::concurrent_queue<std::unique_ptr<std::map<std::string, int> > > mq_map;
-
+    tbb::concurrent_queue<std::string> mq_str;
+    tbb::concurrent_queue<std::map<std::string, int>> mq_map;
+    std::string poisson_str = "poisson pillow";
+    std::map<std::string, int> poisson_map = {{"poisson pillow", 0}};
 
     auto gen_st_time = get_current_time_fenced();
+
+    int poisson_maps_num = 0;
+
+//    ctpl::thread_pool index_threads(mc.indexing_threads);
+//    ctpl::thread_pool merge_threads(mc.merging_threads);
 
     std::vector<std::thread> all_my_threads;
     unsigned long num_all_threads = mc.indexing_threads + mc.merging_threads;
     all_my_threads.reserve(num_all_threads);
 
     for (int i=0; i < mc.indexing_threads; i++){
-        all_my_threads.emplace_back(index_thread, std::ref(mq_str), std::ref(mq_map));
+        all_my_threads.emplace_back(index_thread, std::ref(mq_str), std::ref(mq_map), std::ref(poisson_str), std::ref(poisson_map));
     }
 
     for (int i=0; i < mc.merging_threads; i++){
-        all_my_threads.emplace_back(merge_thread, std::ref(mq_map));
+        all_my_threads.emplace_back(merge_thread, std::ref(mq_map), std::ref(poisson_map), std::ref(mc.indexing_threads), std::ref(poisson_maps_num));
     }
+//
+//    std::vector<std::future<void>> indexing_results(mc.indexing_threads);
+//    std::vector<std::future<void>> merging_results(mc.merging_threads);
+
 
 
     // opening archive
@@ -153,7 +184,7 @@ int main()
         }
         while (arc.next_content_available()){
             content = arc.get_next_content();
-            mq_str.push(&content);
+            mq_str.push(content);
         }
 
     } else{
@@ -163,9 +194,9 @@ int main()
         std::stringstream ss;
         ss << in_f.rdbuf();
         content = ss.str();
-        mq_str.push(&content);
+        mq_str.push(content);
     }
-    mq_str.push(nullptr);
+    mq_str.push(poisson_str);
 
     for (auto &thr: all_my_threads)
     { thr.join(); }
